@@ -1,0 +1,17 @@
+{
+  "name": "quintet",
+  "version": "1.0.0",
+  "description": "Word guessing game that TikTok LIVE chat can play",
+  "main": "server.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "tiktok-live-connector": "2.5.0"
+  }
+}

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: quintet
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/ping
+    envVars:
+      - key: EULER_API_KEY
+        sync: false

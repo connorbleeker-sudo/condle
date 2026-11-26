@@ -1,0 +1,555 @@
+<title>Quintet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+<style>
+/* Layout: game column (length picker, grid, keyboard) with the chat panel beside it on wide screens, below it on phones */
+:root {
+  --bg: #f6f7f9;
+  --tile: #ffffff;
+  --ink: #1c2230;
+  --muted: #6b7384;
+  --line: #d3d8e0;
+  --key: #dfe3ea;
+  --used: #f6f7f9;
+  --used-ink: #b9bfca;
+  --hit: #3a9a5b;
+  --near: #d4a72c;
+  --miss: #7c8494;
+  --bad: #c2453d;
+  --font: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15181e; --tile: #1d2129; --ink: #e9ecf1; --muted: #9aa2b1; --line: #363c48;
+  --key: #3a404c; --used: #15181e; --used-ink: #4a505c; --hit: #3f9e60; --near: #c79c27; --miss: #4b515d; --bad: #e0675f; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #15181e; --tile: #1d2129; --ink: #e9ecf1; --muted: #9aa2b1; --line: #363c48;
+  --key: #3a404c; --used: #15181e; --used-ink: #4a505c; --hit: #3f9e60; --near: #c79c27; --miss: #4b515d; --bad: #e0675f; color-scheme: dark }
+
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.layout { max-width: 980px; margin: 0 auto; padding-block: 16px; display: flex; gap: 24px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+.app { flex: 1 1 420px; max-width: 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+
+header { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+h1 { font-size: 1.5rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lengths { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.lengths button {
+  border: 0; background: var(--tile); color: var(--muted); font: 600 0.9rem var(--font);
+  width: 34px; height: 34px; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.lengths button + button { border-left: 1px solid var(--line); }
+.lengths button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.label { font-size: 0.8rem; color: var(--muted); }
+.btn {
+  border: 1px solid var(--line); background: var(--tile); color: var(--ink);
+  font: 600 0.85rem var(--font); height: 34px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+}
+.btn.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--near); outline-offset: 2px; }
+
+.status { min-height: 1.4em; font-size: 0.95rem; font-weight: 600; text-align: center; }
+.status .word { letter-spacing: 0.12em; text-transform: uppercase; color: var(--hit); }
+.status .sub { color: var(--muted); font-weight: 400; }
+
+.board { --n: 5; width: min(100%, calc(var(--n) * 60px)); display: grid; gap: 5px; container-type: inline-size; }
+.row { display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: 5px; }
+.tile {
+  aspect-ratio: 1; display: grid; place-items: center;
+  border: 2px solid var(--line); border-radius: 4px; background: var(--tile);
+  font-weight: 700; text-transform: uppercase; user-select: none;
+  font-size: calc((100cqw / var(--n)) * 0.5);
+}
+.tile.filled { border-color: var(--muted); }
+.tile.pop { animation: pop 0.12s ease-out; }
+.tile.hit, .tile.near, .tile.miss { color: #fff; border-color: transparent; }
+.tile.hit { background: var(--hit); }
+.tile.near { background: var(--near); }
+.tile.miss { background: var(--miss); }
+.tile.flip { animation: flip 0.5s ease-in-out; }
+.row.shake { animation: shake 0.35s; }
+.row.win .tile { animation: bounce 0.45s ease; }
+
+.keyboard { width: 100%; display: flex; flex-direction: column; gap: 7px; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.krow { display: flex; gap: 6px; }
+.krow.mid { padding-inline: 5%; }
+.key {
+  flex: 1 1 0; min-width: 0; height: 58px; border: 0; border-radius: 6px; cursor: pointer;
+  background: var(--key); color: var(--ink); font: 700 1.05rem var(--font); text-transform: uppercase;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none;
+  transition: background-color 0.2s, color 0.2s;
+}
+.key:active { transform: scale(0.95); }
+.key.wide { flex: 1.6 1 0; font-size: 0.78rem; }
+.key.hit { background: var(--hit); color: #fff; }
+.key.near { background: var(--near); color: #fff; }
+.key.miss { background: var(--used); color: var(--used-ink); box-shadow: inset 0 0 0 1px var(--line); }
+
+.hint { font-size: 0.8rem; color: var(--muted); text-align: center; margin: 0; }
+.hint .h { color: var(--hit); font-weight: 600; } .hint .n { color: var(--near); font-weight: 600; }
+
+/* Chat panel */
+.chat { flex: 0 1 340px; min-width: 0; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--tile); padding: 16px; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; }
+.chat h2 { font-size: 1rem; margin: 0; }
+.chat p { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.45; }
+.field { display: flex; gap: 6px; }
+.field input, .settings input {
+  flex: 1; min-width: 0; height: 34px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--ink); font: 0.9rem var(--font); padding: 0 10px;
+}
+.pill { font-size: 0.75rem; font-weight: 600; padding: 3px 8px; border-radius: 99px; background: var(--key); color: var(--muted); align-self: flex-start; }
+.pill.ok { background: var(--hit); color: #fff; }
+.pill.err { background: var(--bad); color: #fff; }
+.settings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.settings label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: var(--muted); }
+.timer { display: flex; flex-direction: column; gap: 6px; }
+.timer-text { font-size: 0.9rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bar { height: 6px; background: var(--key); border-radius: 99px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--hit); transition: width 0.25s linear; }
+.suggestions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.suggestions li { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; padding: 5px 8px; border-radius: 6px; background: var(--bg); }
+.suggestions .w { font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.suggestions .u { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggestions .t { font-size: 0.72rem; font-weight: 600; }
+.t.fit { color: var(--hit); } .t.close { color: var(--near); } .t.no { color: var(--bad); }
+.suggestions li.picked { outline: 2px solid var(--hit); }
+.suggestions .empty { color: var(--muted); background: none; padding: 0; }
+.picked-line { font-size: 0.9rem; min-height: 1.3em; }
+
+@keyframes pop { 50% { transform: scale(1.1); } }
+@keyframes flip { 0% { transform: rotateX(0); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+@keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+@keyframes bounce { 40% { transform: translateY(-12px); } 70% { transform: translateY(2px); } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="layout">
+  <div class="app">
+    <header>
+      <h1>Quintet</h1>
+      <div class="controls">
+        <span class="label" id="lenLabel">Letters</span>
+        <div class="lengths" id="lengths" role="group" aria-labelledby="lenLabel"></div>
+        <button class="btn" id="newBtn" type="button">New word</button>
+        <button class="btn" id="chatBtn" type="button" aria-pressed="false">Chat mode</button>
+      </div>
+    </header>
+
+    <div class="status" id="status" role="status"></div>
+    <div class="board" id="board" aria-label="Guess grid"></div>
+    <div class="keyboard" id="keyboard"></div>
+    <p class="hint"><span class="h">Green</span> right spot · <span class="n">Yellow</span> wrong spot · Faded keys are not in the word</p>
+  </div>
+
+  <section class="chat" id="chat" hidden aria-label="Chat guessing">
+    <h2>Chat guessing</h2>
+    <p>Viewers type words in chat. When the timer runs out, one suggestion that fits the clues is picked at random and guessed.</p>
+
+    <div class="field">
+      <input id="ttUser" type="text" placeholder="TikTok username" autocomplete="off" spellcheck="false">
+      <button class="btn" id="connectBtn" type="button">Connect</button>
+    </div>
+    <span class="pill" id="connStatus">Not connected</span>
+
+    <div class="settings">
+      <label for="roundSecs">Seconds per guess<input id="roundSecs" type="number" min="5" max="120" value="20"></label>
+      <label for="tolerance">Letters allowed to break clues<input id="tolerance" type="number" min="0" max="5" value="2"></label>
+    </div>
+
+    <div class="timer">
+      <div class="timer-text" id="timerText">Waiting for suggestions</div>
+      <div class="bar"><i id="timerBar"></i></div>
+    </div>
+    <div class="picked-line" id="pickedLine"></div>
+
+    <ul class="suggestions" id="suggestions"></ul>
+
+    <div class="field">
+      <input id="testMsg" type="text" placeholder="Test: type a chat message" autocomplete="off" spellcheck="false">
+      <button class="btn" id="testBtn" type="button">Send</button>
+    </div>
+  </section>
+</div>
+
+<script>
+const ANSWER_LISTS = {
+5: `about above actor acute adapt adopt adult after again agent agree ahead alarm album alert alien align alive alley allow alone along alter amber amend angel anger angle angry ankle apart apple apply arena argue arise armor aroma arrow aside asset audio audit avoid awake award aware awful bacon badge badly baker basic basin batch beach beard beast begin being belly below bench berry birth black blade blame bland blank blast blaze bleak blend bless blind blink block bloom blown blues blunt blush board boast bonus boost booth bound brain brake brand brass brave bread break breed brick bride brief bring brisk broad broke brook brown brush build built bunch burst cabin cable camel canal candy canoe cargo carry carve catch cause cedar chain chair chalk champ chant charm chart chase cheap check cheek cheer chess chest chief child chill choir chord chose civic claim clash class clean clear clerk click cliff climb cling clock close cloth cloud clown coach coast cobra cocoa coral couch could count court cover crack craft crane crash crate crawl crazy cream creek crest crisp cross crowd crown crude crumb crush crust cubic curve cycle daily dairy daisy dance dealt death debut decay decor delay delta dense depth diary dirty disco ditch dodge doing donor doubt dough dozen draft drain drama drank drawn dread dream dress dried drift drill drink drive drone drown dwarf dying eager eagle early earth easel eaten eight elbow elder elect elite email ember empty enjoy enter entry equal equip error essay event every exact exist extra fable faint fairy faith false fancy feast fence ferry fetch fever fiber field fiery fifth fifty fight final first flake flame flash fleet flesh flint float flock flood floor flour fluid flute focus foggy force forge forth forty forum found frame frank fraud fresh front frost froze fruit fudge fully funny fuzzy gauge ghost giant given glade gland glass gleam glide globe gloom glory glove grace grade grain grand grant grape graph grasp grass grave gravy great greed green greet grief grill grind groan groom gross group grove growl grown guard guess guest guide guild habit happy harsh haste hatch haunt haven heart heavy hedge hello hence heron hinge hobby honey honor horse hotel hound house hover human humid humor hurry ideal image imply index inner input irony issue ivory jelly jewel joint joker jolly judge juice jumpy karma kayak knack kneel knife knock known label labor lance large laser latch later laugh layer learn lease least leave ledge lemon level lever light limit linen liner lodge logic loose lover lower loyal lucky lunar lunch lyric magic major maker mango manor maple march marsh match mayor medal media melon mercy merge merit merry metal meter midst might minor minty mirth model moist money month moose moral motor mound mount mourn mouse mouth movie muddy mural music naive nerve never newly night ninja noble noise north notch novel nurse nylon oasis ocean offer often olive onion opera orbit order organ other otter ought ounce outer owner oxide ozone paint panel panic paper party pasta paste patch pause peace peach pearl pedal penny perch phase phone photo piano piece pilot pinch pitch pixel pizza place plain plane plant plate plaza plead pluck plumb plume plush poem point polar porch pound power press price pride prime print prior prism prize probe prone proof proud prove prune pulse punch pupil puppy purse quack queen query quest quick quiet quilt quirk quite quota quote radar radio rainy raise rally ranch range rapid raven reach react ready realm rebel refer reign relax relay renew reply ridge rifle right rigid rinse risky rival river roast robin robot rocky rough round route royal rugby ruler rural rusty sadly saint salad salon sauce scale scare scarf scene scent scone scoop scope score scout scrap screw scrub seize sense serve setup seven shade shake shall shape share shark sharp sheep sheet shelf shell shift shine shirt shock shore short shout shrub siege sight silly since sixth skate skill skirt skull slate sleep slice slide slope smart smell smile smoke snack snake sneak solar solid solve sorry sound south space spare spark speak spear speed spell spend spice spike spine spoke spoon sport spray squad stack staff stage stain stair stake stamp stand stare start state steam steel steep stern stick stiff still sting stock stone stood stool storm story stove straw strip stuck study stuff style sugar suite sunny super surge swamp swarm swear sweat sweep sweet swift swing sword syrup table taken taste teach tease tempo thank theme there thick thief thing think third thorn those three threw throw thumb tiger tight timer tired title toast today token topic torch total touch tough tower toxic trace track trade trail train trait trash tread treat trend trial tribe trick tried troop truck truly trunk trust truth tulip tumor tuned twice twist ultra uncle under union unity until upper upset urban usage usual vague valid value valve vapor vault venue verse video vigor vinyl viral virus visit vital vivid vocal voice voter wagon waist waste watch water weary weave wedge weigh weird whale wheat wheel where which while whirl white whole whose widen width witch woman world worry worse worst worth would wound wrist write wrong yacht yearn yield young youth zebra zesty`,
+6: `action animal answer anyone appear arrive artist autumn banana basket battle beauty become before behind better beyond bitter bottle bottom branch breath bridge bright broken bubble bucket button camera candle carbon carpet castle center chance change charge cheese choice choose church circle closet coffee cookie corner cotton county couple course cousin create credit cruise custom damage danger dealer debate decade decide defend degree demand desert design detail device dinner direct doctor dollar donkey double dragon drawer driver during easily editor effect effort eighty either eleven empire energy engine enough entire escape estate except expert fabric factor fairly family famous farmer father figure finger finish flight flower follow forest forget formal former friend frozen future garden gather gentle ginger global golden ground growth guitar hammer handle happen harbor health heaven height helmet hidden hockey honest island jacket jungle junior kettle kidney kitten ladder launch lawyer leader legend lesson letter liquid listen little lizard locate lovely luxury magnet manage manner marble margin market master matter meadow medium member memory mental method middle minute mirror mobile modern moment monkey mother motion museum muscle narrow nation nature nearby needle nephew normal notice number object office orange oxygen palace parent pencil people pepper period person pickle pillow planet player pocket poetry policy potato powder praise prince prison profit public puzzle rabbit random reason record reduce remote repair report rescue result return reward ribbon riddle rocket rubber saddle safety salmon sample school screen season second secret select senior shadow silver simple singer sister sketch smooth soccer spider spirit spring square stable statue sticky stream street strong studio summer sunset supply survey switch symbol system tablet talent target temple tennis thirty thread throat ticket timber tomato tongue toward travel tunnel turkey turtle twelve unique update useful valley velvet violin visual volume walnut wander wealth weekly weight window winner winter wisdom wizard wonder wooden worker yellow zipper`,
+7: `account achieve address advance airport ancient another anxiety balance balloon bandage battery bedroom benefit bicycle biscuit blanket brother cabinet cartoon ceiling century chicken chimney chapter climate clothes cluster college comfort command compare concert connect contain content control cottage counter country courage crystal culture curtain cushion custard dentist deliver diamond digital dolphin drawing elegant element evening example explain express extreme factory faculty fashion feather fiction finance fishing foreign fortune forward freedom furnace gallery garbage general genuine gesture giraffe glimpse grammar granite gravity harmony harvest healthy heading hearing heavily history holiday hostage hundred husband imagine inspect instant journal journey justice kitchen kingdom laundry leather library license lobster machine mansion meaning measure message million mineral mission mistake mixture monster morning musical mystery natural network nothing nowhere nuclear obvious octopus opinion orchard organic outdoor package painter pancake panther parking partner passage patient pattern penguin pension perfect pianist picture pilgrim pioneer plastic pottery poverty predict premium present primary problem process produce product program project promise protect provide publish pumpkin pyramid quality quarter radical railway rainbow reading reality receipt recover regular release reptile request respect roughly routine sailing satisfy scarlet science scratch section serious servant session setting several shelter sheriff shortly silence sincere soldier speaker special sponsor station stomach storage strange student subject success suggest summary support surface teacher texture theater thunder tonight tornado tourist traffic trouble trumpet uniform unknown upgrade utility variety vehicle venture version victory village vintage visible volcano walking warning weather wedding welcome western whisper whistle without witness wrapper writing`,
+8: `absolute abstract accident accurate activity actually addition adequate aircraft alphabet ambition analysis anything anywhere apparent approach argument athletic attitude audience bachelor backyard baseball bathroom becoming birthday blizzard boundary bracelet building business calendar campaign capacity cardinal ceremony champion chemical children circular climbing clothing colorful complete computer congress constant consumer continue contract creature critical crossing cucumber cupboard customer daughter deadline decision delivery designer detailed diagnose dinosaur director disaster discount discover distance division document dramatic dumpling economic educated elephant emphasis employee engineer entrance envelope equation estimate evidence exercise exposure external familiar favorite festival football forecast fountain fragment frequent friendly function gardener generous gigantic graduate grateful guardian hardware heritage highland historic homework hospital identity incident increase indicate industry innocent instance interest internal invasion investor judgment kangaroo keyboard landmark language learning lifetime lighting location magazine mainland maintain majority marathon material medicine memorial merchant midnight military minister mountain movement mushroom national negative neighbor notebook occasion official opposite ordinary organize original painting paradise particle passport peaceful personal physical platform pleasant pleasure politics position positive possible powerful practice precious presence previous princess priority probably producer progress property proposal prospect protocol purchase question rainfall reaction receiver recently regional relation relative remember research resident resource response romantic sandwich schedule scissors sentence separate sequence shoulder sidewalk skeleton software solution squirrel standard starting stranger strategy strength struggle stunning suitcase sunlight superior surprise survival sweater teaspoon teenager terminal thousand together tomorrow treasure triangle tropical universe vacation valuable variable vertical vineyard violence wildlife windmill wireless workshop yourself`,
+9: `abandoned accompany according advantage adventure afternoon agreement alongside apartment architect assistant attention authority available awareness basically beautiful beginning breakfast butterfly calculate candidate carefully celebrate certainly challenge character chocolate classroom collector community companion complaint condition confusion copyright corporate crocodile delicious democracy dimension direction disappear discovery education effective efficient emergency encounter equipment essential establish everybody excellent expensive explosion extension extremely fantastic fireplace frequency furniture generally gentleman geography gratitude guarantee happiness highlight hurricane important including influence insurance intention interview invisible knowledge landscape lightning limestone literally lunchtime magnitude marketing marvelous mechanism milestone necessary nightmare objective obviously operation orchestra otherwise ourselves paragraph passenger perfectly permanent pineapple pollution porcupine potential practical precisely president primarily principal procedure professor promotion pronounce protector publisher quarterly reference represent scientist secretary selection signature similarly situation sculpture snowflake something sometimes somewhere spaghetti spectacle statement structure substance supporter telephone telescope temporary therefore tradition transform treatment undermine universal vegetable volunteer wonderful yesterday`,
+10: `absolutely accounting accurately activities additional afterwards apparently appearance assignment atmosphere attractive background basketball biological carelessly centimeter collection commercial commission commitment comparison competitor completely concerning conclusion confidence connection constantly continuous contribute convenient conversion correction creativity curriculum dedication definitely democratic department dictionary difference difficulty dishwasher distribute employment enterprise especially everything everywhere excitement experience experiment expression friendship generation girlfriend government grapefruit historical horizontal hypothesis importance impossible impression incredible individual industrial initiative inspection instrument investment invitation journalist laboratory lighthouse literature management membership microphone motorcycle mysterious newsletter nutritious occupation officially particular percentage permission personally philosophy photograph playground population possession preference previously production profession programmer properties protection psychology publishing punishment quarantine reasonable recreation reflection regulation relatively remarkable repetition reputation resolution restaurant retirement revolution scientific settlement skateboard spacecraft strawberry successful sufficient suggestion supervisor surprising technology television throughout tournament understand university vegetarian volleyball watermelon wilderness`
+};
+
+const MIN = 5, MAX = 10, TRIES = 6;
+const RANK = { miss: 1, near: 2, hit: 3 };
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const answers = {};
+for (const n in ANSWER_LISTS) {
+  answers[n] = [...new Set(ANSWER_LISTS[n].trim().split(/\s+/).filter(w => w.length === +n && /^[a-z]+$/.test(w)))];
+}
+const dictionaries = {};
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const $ = id => document.getElementById(id);
+const boardEl = $('board'), kbEl = $('keyboard'), statusEl = $('status'), lengthsEl = $('lengths');
+let state, busy = false;
+
+async function loadDictionary(n) {
+  if (n in dictionaries) return dictionaries[n];
+  try {
+    const res = await fetch(`words-${n}.txt`);
+    if (!res.ok) throw new Error(res.status);
+    dictionaries[n] = new Set([...(await res.text()).trim().split(/\s+/), ...answers[n]]);
+  } catch {
+    dictionaries[n] = null;   // list unavailable: accept any guess of the right length
+  }
+  return dictionaries[n];
+}
+
+function score(guess, answer) {
+  const n = answer.length, res = Array(n).fill('miss'), left = {};
+  for (let i = 0; i < n; i++) {
+    if (guess[i] === answer[i]) res[i] = 'hit';
+    else left[answer[i]] = (left[answer[i]] || 0) + 1;
+  }
+  for (let i = 0; i < n; i++) {
+    if (res[i] !== 'hit' && left[guess[i]] > 0) { res[i] = 'near'; left[guess[i]]--; }
+  }
+  return res;
+}
+
+// How many clues a word breaks: wrong letter on a green spot, a yellow letter missing or
+// on a spot already ruled out, or a letter already known not to be in the word.
+function cluesBroken(word) {
+  const green = {}, yellowBanned = {}, present = new Set(), absent = new Set();
+  state.guesses.forEach((g, r) => [...g].forEach((ch, i) => {
+    const m = state.marks[r][i];
+    if (m === 'hit') { green[i] = ch; present.add(ch); }
+    else if (m === 'near') { (yellowBanned[ch] ||= new Set()).add(i); present.add(ch); }
+  }));
+  state.guesses.forEach((g, r) => [...g].forEach((ch, i) => { if (state.marks[r][i] === 'miss' && !present.has(ch)) absent.add(ch); }));
+  let broken = 0;
+  for (const i in green) if (word[i] !== green[i]) broken++;
+  for (const ch in yellowBanned) {
+    if (!word.includes(ch)) broken++;
+    else if ([...yellowBanned[ch]].some(i => word[i] === ch)) broken++;
+  }
+  for (const ch of absent) if (word.includes(ch)) broken++;
+  return broken;
+}
+
+function newGame(n = state ? state.n : 5) {
+  const list = answers[n];
+  state = { n, answer: list[Math.floor(Math.random() * list.length)], guesses: [], marks: [], current: '', over: false };
+  save(); buildBoard(); render(); setStatus('');
+  loadDictionary(n);
+  $('pickedLine').textContent = '';
+  chat.resetRound();
+}
+
+function save() { store.set('quintet-game-v2', state); store.set('quintet-length', state.n); }
+
+function buildLengths() {
+  for (let n = MIN; n <= MAX; n++) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = n; b.dataset.n = n;
+    b.setAttribute('aria-label', `${n} letters`);
+    b.onclick = () => { if (!busy && (n !== state.n || state.over)) newGame(n); b.blur(); };
+    lengthsEl.appendChild(b);
+  }
+}
+
+function buildBoard() {
+  boardEl.style.setProperty('--n', state.n);
+  boardEl.innerHTML = '';
+  for (let r = 0; r < TRIES; r++) {
+    const row = document.createElement('div'); row.className = 'row';
+    for (let c = 0; c < state.n; c++) row.appendChild(Object.assign(document.createElement('div'), { className: 'tile' }));
+    boardEl.appendChild(row);
+  }
+  lengthsEl.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.n === state.n));
+}
+
+function buildKeyboard() {
+  ['qwertyuiop', 'asdfghjkl', '+zxcvbnm-'].forEach((r, idx) => {
+    const row = document.createElement('div'); row.className = 'krow' + (idx === 1 ? ' mid' : '');
+    [...r].forEach(ch => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'key';
+      if (ch === '+') { b.textContent = 'Enter'; b.dataset.key = 'Enter'; b.classList.add('wide'); }
+      else if (ch === '-') { b.textContent = '⌫'; b.dataset.key = 'Backspace'; b.classList.add('wide'); b.setAttribute('aria-label', 'Delete'); }
+      else { b.textContent = ch; b.dataset.key = ch; }
+      row.appendChild(b);
+    });
+    kbEl.appendChild(row);
+  });
+}
+
+function render() {
+  const rows = boardEl.children;
+  for (let r = 0; r < TRIES; r++) {
+    const word = r < state.guesses.length ? state.guesses[r] : r === state.guesses.length ? state.current : '';
+    for (let c = 0; c < state.n; c++) {
+      const t = rows[r].children[c];
+      t.textContent = word[c] || '';
+      t.className = 'tile' + (word[c] ? ' filled' : '') + (r < state.marks.length ? ' ' + state.marks[r][c] : '');
+    }
+  }
+  const best = {};
+  state.guesses.forEach((g, r) => [...g].forEach((ch, i) => {
+    const m = state.marks[r][i];
+    if (!best[ch] || RANK[m] > RANK[best[ch]]) best[ch] = m;
+  }));
+  kbEl.querySelectorAll('.key').forEach(k => {
+    k.classList.remove('hit', 'near', 'miss');
+    if (best[k.dataset.key]) k.classList.add(best[k.dataset.key]);
+  });
+}
+
+function setStatus(html) { statusEl.innerHTML = html; }
+
+function shake(msg) {
+  const row = boardEl.children[state.guesses.length];
+  row.classList.remove('shake'); void row.offsetWidth; row.classList.add('shake');
+  setStatus(msg);
+}
+
+// Validate and play a guess. Returns true if it was accepted.
+async function playGuess(g) {
+  if (busy || state.over) return false;
+  if (g.length !== state.n) { shake(`Enter ${state.n} letters`); return false; }
+  const dict = await loadDictionary(state.n);
+  if (dict && !dict.has(g)) { shake('Not in the word list'); return false; }
+  if (state.guesses.includes(g)) { shake('Already guessed'); return false; }
+
+  const marks = score(g, state.answer);
+  const r = state.guesses.length;
+  state.current = g; render();
+  state.guesses.push(g); state.marks.push(marks); state.current = '';
+  const won = g === state.answer, lost = !won && state.guesses.length === TRIES;
+  if (won || lost) state.over = true;
+  save();
+  setStatus('');
+
+  // Flip each tile in turn, showing its colour at the halfway point.
+  busy = true;
+  const tiles = boardEl.children[r].children, step = reduceMotion ? 0 : 280;
+  [...tiles].forEach((t, i) => setTimeout(() => {
+    t.classList.add('flip');
+    setTimeout(() => t.classList.add(marks[i]), reduceMotion ? 0 : 250);
+  }, i * step));
+  await new Promise(res => setTimeout(res, (state.n - 1) * step + (reduceMotion ? 0 : 520)));
+  busy = false; render();
+
+  if (won || lost) {
+    if (won) boardEl.children[r].classList.add('win');
+    const s = store.get('quintet-record', {});
+    const rec = s[state.n] || { played: 0, won: 0 };
+    rec.played++; if (won) rec.won++;
+    s[state.n] = rec; store.set('quintet-record', s);
+    const next = chat.on ? 'next word in a few seconds' : 'press Enter for a new word';
+    const tally = `<span class="sub"> · ${rec.won} of ${rec.played} solved at ${state.n} letters · ${next}</span>`;
+    setStatus(won ? `Solved in ${state.guesses.length}!${tally}` : `The word was <span class="word">${state.answer}</span>${tally}`);
+    chat.gameOver();
+  } else {
+    chat.resetRound();
+  }
+  return true;
+}
+
+function press(key) {
+  if (busy) return;
+  if (state.over) { if (key === 'Enter') newGame(); return; }
+  if (key === 'Enter') { playGuess(state.current); return; }
+  const before = state.current.length;
+  if (key === 'Backspace') state.current = state.current.slice(0, -1);
+  else if (/^[a-z]$/.test(key) && state.current.length < state.n) state.current += key;
+  else return;
+  render();
+  if (state.current.length > before) {
+    const t = boardEl.children[state.guesses.length].children[state.current.length - 1];
+    t.classList.remove('pop'); void t.offsetWidth; t.classList.add('pop');
+  }
+  save();
+}
+
+/* ---------- Chat mode ---------- */
+const chat = {
+  on: false,
+  entries: new Map(),     // viewer -> { word, user }
+  deadline: 0,
+  tick: null,
+  source: null,
+
+  toggle() {
+    this.on = !this.on;
+    $('chat').hidden = !this.on;
+    $('chatBtn').classList.toggle('on', this.on);
+    $('chatBtn').setAttribute('aria-pressed', this.on);
+    store.set('quintet-chat-on', this.on);
+    this.resetRound();
+  },
+
+  settings() {
+    const secs = Math.min(120, Math.max(5, parseInt($('roundSecs').value, 10) || 20));
+    const tol = Math.min(5, Math.max(0, parseInt($('tolerance').value, 10)));
+    return { secs, tol: Number.isNaN(tol) ? 2 : tol };
+  },
+
+  // Each chat message: take any words of the current length; keep each viewer's latest one.
+  receive(user, text) {
+    if (!this.on || state.over || busy) return;
+    const words = (text.toLowerCase().match(/[a-z]+/g) || []).filter(w => w.length === state.n);
+    if (!words.length) return;
+    const word = words[words.length - 1];
+    this.entries.delete(user);
+    this.entries.set(user, { word, user });
+    if (!this.deadline) this.deadline = Date.now() + this.settings().secs * 1000;
+    this.renderList();
+  },
+
+  async classify(word) {
+    const dict = await loadDictionary(state.n);
+    if (dict && !dict.has(word)) return { ok: false, label: 'not a word', cls: 'no' };
+    if (state.guesses.includes(word)) return { ok: false, label: 'already guessed', cls: 'no' };
+    const broken = cluesBroken(word), tol = this.settings().tol;
+    if (broken === 0) return { ok: true, label: 'fits', cls: 'fit' };
+    if (broken <= tol) return { ok: true, label: `${broken} off`, cls: 'close' };
+    return { ok: false, label: `${broken} off`, cls: 'no' };
+  },
+
+  async renderList(pickedUser) {
+    const ul = $('suggestions');
+    if (!this.entries.size) { ul.innerHTML = '<li class="empty">No suggestions yet this round.</li>'; return; }
+    const items = [...this.entries.values()].reverse().slice(0, 40);
+    const rows = await Promise.all(items.map(async e => ({ e, c: await this.classify(e.word) })));
+    ul.innerHTML = '';
+    rows.forEach(({ e, c }) => {
+      const li = document.createElement('li');
+      if (e.user === pickedUser) li.className = 'picked';
+      li.innerHTML = `<span class="w"></span><span class="u"></span><span class="t ${c.cls}">${c.label}</span>`;
+      li.querySelector('.w').textContent = e.word;
+      li.querySelector('.u').textContent = '@' + e.user;
+      ul.appendChild(li);
+    });
+  },
+
+  resetRound() {
+    this.entries.clear();
+    this.deadline = 0;
+    this.renderList();
+    clearInterval(this.tick);
+    if (this.on) this.tick = setInterval(() => this.update(), 250);
+    this.update();
+  },
+
+  update() {
+    const text = $('timerText'), bar = $('timerBar');
+    if (!this.on) return;
+    if (state.over) { text.textContent = 'Round over'; bar.style.width = '0'; return; }
+    if (!this.deadline) { text.textContent = `Waiting for ${state.n}-letter words in chat`; bar.style.width = '0'; return; }
+    const total = this.settings().secs * 1000, left = Math.max(0, this.deadline - Date.now());
+    text.textContent = `Guessing in ${Math.ceil(left / 1000)}s · ${this.entries.size} suggestion${this.entries.size === 1 ? '' : 's'}`;
+    bar.style.width = `${(1 - left / total) * 100}%`;
+    if (left === 0 && !busy) this.pick();
+  },
+
+  async pick() {
+    clearInterval(this.tick);
+    const all = [...this.entries.values()];
+    const eligible = [];
+    for (const e of all) if ((await this.classify(e.word)).ok) eligible.push(e);
+    if (!eligible.length) {
+      $('pickedLine').textContent = 'No suggestion fit the clues. Collecting again.';
+      this.entries.clear(); this.deadline = 0; this.renderList();
+      this.tick = setInterval(() => this.update(), 250);
+      return;
+    }
+    const choice = eligible[Math.floor(Math.random() * eligible.length)];
+    await this.renderList(choice.user);
+    const line = $('pickedLine');
+    line.innerHTML = 'Picked <b></b> from <span></span>';
+    line.querySelector('b').textContent = choice.word.toUpperCase();
+    line.querySelector('span').textContent = '@' + choice.user;
+    state.current = ''; render();
+    await playGuess(choice.word);
+  },
+
+  gameOver() {
+    clearInterval(this.tick);
+    this.update();
+    if (this.on) setTimeout(() => { if (this.on && state.over) newGame(); }, 6000);
+  },
+
+  // Live TikTok chat comes from the hosted server's /api/chat stream.
+  async connect() {
+    const user = $('ttUser').value.trim().replace(/^@/, '');
+    const pill = $('connStatus');
+    if (this.source) { this.source.close(); this.source = null; }
+    if (!user) { pill.className = 'pill err'; pill.textContent = 'Enter a TikTok username'; return; }
+    store.set('quintet-tt-user', user);
+    pill.className = 'pill'; pill.textContent = 'Connecting…';
+    let hasServer = false;
+    try { hasServer = (await fetch('api/ping')).ok; } catch {}
+    if (!hasServer) {
+      pill.className = 'pill err';
+      pill.textContent = 'Live chat needs the hosted version of this game';
+      return;
+    }
+    const es = new EventSource(`api/chat?user=${encodeURIComponent(user)}`);
+    this.source = es;
+    es.onmessage = ev => {
+      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.type === 'status') {
+        pill.className = 'pill ' + (msg.state === 'connected' ? 'ok' : msg.state === 'error' ? 'err' : '');
+        pill.textContent = msg.message;
+        if (msg.state === 'error') { es.close(); this.source = null; }
+      } else if (msg.type === 'chat') {
+        this.receive(msg.user, msg.text);
+      }
+    };
+    es.onerror = () => { if (this.source === es) { pill.className = 'pill err'; pill.textContent = 'Connection lost. Press Connect to retry.'; es.close(); this.source = null; } };
+  }
+};
+
+/* ---------- Wiring ---------- */
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest && e.target.closest('input')) return;
+  const k = e.key === 'Enter' || e.key === 'Backspace' ? e.key : e.key.toLowerCase();
+  if (k === 'Enter' || k === 'Backspace' || /^[a-z]$/.test(k)) {
+    if (k === 'Enter' && e.target.closest && e.target.closest('button')) return;
+    e.preventDefault(); press(k);
+  }
+});
+kbEl.addEventListener('click', e => { const b = e.target.closest('.key'); if (b) { press(b.dataset.key); b.blur(); } });
+$('newBtn').onclick = e => { if (!busy) newGame(); e.currentTarget.blur(); };
+$('chatBtn').onclick = () => chat.toggle();
+$('connectBtn').onclick = () => chat.connect();
+$('ttUser').addEventListener('keydown', e => { if (e.key === 'Enter') chat.connect(); });
+const sendTest = () => { const v = $('testMsg').value; if (v.trim()) { chat.receive('you', v); $('testMsg').value = ''; } };
+$('testBtn').onclick = sendTest;
+$('testMsg').addEventListener('keydown', e => { if (e.key === 'Enter') sendTest(); });
+['roundSecs', 'tolerance'].forEach(id => {
+  const saved = store.get('quintet-' + id, null);
+  if (saved !== null) $(id).value = saved;
+  $(id).addEventListener('change', () => { store.set('quintet-' + id, $(id).value); chat.renderList(); });
+});
+$('ttUser').value = store.get('quintet-tt-user', '');
+
+buildLengths(); buildKeyboard();
+const saved = store.get('quintet-game-v2', null);
+if (saved && answers[saved.n] && Array.isArray(saved.guesses) && !saved.over) {
+  state = saved; state.current = ''; buildBoard(); render(); loadDictionary(state.n);
+} else {
+  const n = store.get('quintet-length', 5);
+  newGame(answers[n] ? n : 5);
+}
+if (store.get('quintet-chat-on', false)) chat.toggle();
+</script>
