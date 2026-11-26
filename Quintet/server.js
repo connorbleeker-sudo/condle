@@ -38,9 +38,10 @@ function openRoom(name) {
   const fail = message => { setStatus('error', message); for (const res of room.clients) res.end(); closeRoom(name); };
 
   conn.on(WebcastEvent.CHAT, data => {
-    const user = data.user?.uniqueId || data.user?.nickname || 'viewer';
-    if (data.comment) broadcast(room, { type: 'chat', user, text: String(data.comment).slice(0, 200) });
-  });
+const user = data.user?.uniqueId || data.user?.displayId || data.user?.nickname || 'viewer';
+    const text = data.comment || data.content;
+    if (text) broadcast(room, { type: 'chat', user, text: String(text).slice(0, 200) });
+    });
   conn.on(ControlEvent.DISCONNECTED, () => {
     if (rooms.get(name) === room) fail(`Lost connection to @${name}. The stream may have ended. Press Connect to retry.`);
   });
